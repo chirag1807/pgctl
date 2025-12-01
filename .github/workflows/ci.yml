@@ -30,24 +30,11 @@ jobs:
             - name: List built files
               run: ls -lah build/
 
-            - name: Rename executables for release
-              run: |
-                  cd build
-                  mv pgctl-linux pgctl-linux-x64
-                  mv pgctl-macos pgctl-macos-x64
-                  mv pgctl-macos-arm64 pgctl-macos-arm64
-                  mv pgctl.exe pgctl-windows-x64.exe
-                  ls -lah
-
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
               with:
                   name: pgctl-executables
-                  path: |
-                      build/pgctl-linux-x64
-                      build/pgctl-macos-x64
-                      build/pgctl-macos-arm64
-                      build/pgctl-windows-x64.exe
+                  path: build/
                   retention-days: 30
 
     release:
@@ -82,7 +69,7 @@ jobs:
                       release-artifacts/pgctl-linux-x64
                       release-artifacts/pgctl-macos-x64
                       release-artifacts/pgctl-macos-arm64
-                      release-artifacts/pgctl-windows-x64.exe
+                      release-artifacts/pgctl-win-x64.exe
                   draft: false
                   prerelease: false
                   generate_release_notes: true
@@ -95,13 +82,13 @@ jobs:
                       - **Linux x64**: `pgctl-linux-x64`
                       - **macOS x64**: `pgctl-macos-x64`
                       - **macOS ARM64**: `pgctl-macos-arm64`
-                      - **Windows x64**: `pgctl-windows-x64.exe`
+                      - **Windows x64**: `pgctl-win-x64.exe`
 
                       ### 📝 How to use:
                       1. Download the appropriate executable for your platform
                       2. Make it executable (Linux/macOS): `chmod +x pgctl-*`
                       3. Set up environment variables (PG_HOST, PG_USER, PG_PASSWORD, PG_PORT)
-                      4. Run: `./pgctl-linux-x64` or `pgctl-windows-x64.exe`
+                      4. Run: `./pgctl-linux-x64` or `pgctl-win-x64.exe`
 
                       ### ✨ What's New:
                       See release notes below for detailed changes.
