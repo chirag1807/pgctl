@@ -6,7 +6,7 @@ const { platform } = require('os');
 const execAsync = promisify(exec);
 
 /**
- * Get PostgreSQL connection parameters from environment
+ * Get DATABASE_URL for dbmate
  */
 function getPgEnv() {
   return {
@@ -24,16 +24,16 @@ function getDatabaseUrl(dbName) {
   if (!dbName && process.env.DATABASE_URL) {
     return process.env.DATABASE_URL;
   }
-  
+
   if (!dbName) {
     throw new Error('Database name is required');
   }
-  
+
   const user = process.env.PG_USER;
   const password = process.env.PG_PASSWORD;
   const host = process.env.PG_HOST;
   const port = process.env.PG_PORT;
-  
+
   return `postgres://${user}:${password}@${host}:${port}/${dbName}?sslmode=disable`;
 }
 
@@ -41,25 +41,28 @@ function getDatabaseUrl(dbName) {
  * Execute a psql command
  */
 async function executePsqlCommand(sql, options = {}) {
-  const env = { 
+  const env = {
+    ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
-    PGPASSWORD: process.env.PG_PASSWORD
+    PGPASSWORD: process.env.PG_PASSWORD,
+    // Disable pager on macOS/Linux to prevent hanging
+    PAGER: 'cat'
   };
   const dbFlag = options.database ? `-d ${options.database}` : '';
-  
-  // Use -t for tuple-only mode, -A for unaligned output
-  const command = `psql -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbFlag} -c "${sql}"`;
-  
+
+  // Use --no-psqlrc to avoid user config issues, -P pager=off as backup
+  const command = `psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbFlag} -c "${sql}"`;
+
   try {
     const { stdout, stderr } = await execAsync(command, { env });
     return { stdout, stderr, success: true };
   } catch (error) {
-    return { 
-      stdout: error.stdout || '', 
-      stderr: error.stderr || error.message, 
-      success: false 
+    return {
+      stdout: error.stdout || '',
+      stderr: error.stderr || error.message,
+      success: false
     };
   }
 }
@@ -69,10 +72,10 @@ async function executePsqlCommand(sql, options = {}) {
  */
 async function listDatabases() {
   console.log(chalk.blue('📋 Listing all databases...\n'));
-  
+
   const sql = "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname;";
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green('✓ Databases:'));
     console.log(result.stdout);
@@ -87,10 +90,10 @@ async function listDatabases() {
  */
 async function createDatabase(dbName) {
   console.log(chalk.blue(`➕ Creating database "${dbName}"...\n`));
-  
+
   const sql = `CREATE DATABASE ${dbName};`;
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green(`✓ Database "${dbName}" created successfully!`));
   } else {
@@ -108,7 +111,7 @@ async function createDatabase(dbName) {
  */
 async function dropDatabase(dbName) {
   console.log(chalk.blue(`🗑️  Dropping database "${dbName}"...\n`));
-  
+
   // First, terminate all connections to the database
   const terminateSql = `
     SELECT pg_terminate_backend(pg_stat_activity.pid)
@@ -116,13 +119,13 @@ async function dropDatabase(dbName) {
     WHERE pg_stat_activity.datname = '${dbName}'
     AND pid <> pg_backend_pid();
   `;
-  
+
   await executePsqlCommand(terminateSql);
-  
+
   // Now drop the database
   const sql = `DROP DATABASE IF EXISTS ${dbName};`;
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green(`✓ Database "${dbName}" dropped successfully!`));
   } else {
@@ -137,36 +140,36 @@ async function dropDatabase(dbName) {
 async function connectToPsql(dbName) {
   console.log(chalk.blue(`🔌 Connecting to psql for database "${dbName}"...`));
   console.log(chalk.gray('(Type \\q or press Ctrl+C to exit psql)\n'));
-  
-  const env = { 
+
+  const env = {
     ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD
   };
-  
+
   const args = [
     '-h', env.PGHOST,
     '-p', env.PGPORT,
     '-U', env.PGUSER,
     '-d', dbName
   ];
-  
+
   return new Promise((resolve) => {
     const psqlProcess = spawn('psql', args, {
       env,
       stdio: 'inherit',
       shell: platform() === 'win32'
     });
-    
+
     psqlProcess.on('error', (error) => {
       console.log(chalk.red('\n✗ Error connecting to psql:'));
       console.log(chalk.red(error.message));
       console.log(chalk.yellow('\nMake sure psql is installed and in your PATH.'));
       resolve();
     });
-    
+
     psqlProcess.on('close', (code) => {
       if (code !== 0 && code !== null) {
         console.log(chalk.yellow(`\npsql exited with code ${code}`));
@@ -181,21 +184,21 @@ async function connectToPsql(dbName) {
  */
 async function runDbmateUp(dbName, migrationsPath = './db/migrations') {
   console.log(chalk.blue(`⬆️  Running dbmate up (applying migrations to "${dbName}")...\n`));
-  
+
   const databaseUrl = getDatabaseUrl(dbName);
-  const env = { 
-    ...process.env, 
+  const env = {
+    ...process.env,
     DATABASE_URL: databaseUrl,
     DBMATE_MIGRATIONS_DIR: migrationsPath
   };
-  
+
   return new Promise((resolve) => {
     const dbmateProcess = spawn('dbmate', ['up'], {
       env,
       stdio: 'inherit',
       shell: platform() === 'win32'
     });
-    
+
     dbmateProcess.on('error', (error) => {
       console.log(chalk.red('\n✗ Error running dbmate:'));
       console.log(chalk.red(error.message));
@@ -203,7 +206,7 @@ async function runDbmateUp(dbName, migrationsPath = './db/migrations') {
       console.log(chalk.cyan('Install dbmate: https://github.com/amacneil/dbmate#installation'));
       resolve();
     });
-    
+
     dbmateProcess.on('close', (code) => {
       if (code === 0) {
         console.log(chalk.green('\n✓ Migrations applied successfully!'));
@@ -220,21 +223,21 @@ async function runDbmateUp(dbName, migrationsPath = './db/migrations') {
  */
 async function runDbmateDown(dbName, migrationsPath = './db/migrations') {
   console.log(chalk.blue(`⬇️  Running dbmate down (rolling back migrations for "${dbName}")...\n`));
-  
+
   const databaseUrl = getDatabaseUrl(dbName);
-  const env = { 
-    ...process.env, 
+  const env = {
+    ...process.env,
     DATABASE_URL: databaseUrl,
     DBMATE_MIGRATIONS_DIR: migrationsPath
   };
-  
+
   return new Promise((resolve) => {
     const dbmateProcess = spawn('dbmate', ['down'], {
       env,
       stdio: 'inherit',
       shell: platform() === 'win32'
     });
-    
+
     dbmateProcess.on('error', (error) => {
       console.log(chalk.red('\n✗ Error running dbmate:'));
       console.log(chalk.red(error.message));
@@ -242,7 +245,7 @@ async function runDbmateDown(dbName, migrationsPath = './db/migrations') {
       console.log(chalk.cyan('Install dbmate: https://github.com/amacneil/dbmate#installation'));
       resolve();
     });
-    
+
     dbmateProcess.on('close', (code) => {
       if (code === 0) {
         console.log(chalk.green('\n✓ Migration rolled back successfully!'));
@@ -259,21 +262,21 @@ async function runDbmateDown(dbName, migrationsPath = './db/migrations') {
  */
 async function runDbmateStatus(dbName, migrationsPath = './db/migrations') {
   console.log(chalk.blue(`📊 Running dbmate status (checking migration status for "${dbName}")...\n`));
-  
+
   const databaseUrl = getDatabaseUrl(dbName);
-  const env = { 
-    ...process.env, 
+  const env = {
+    ...process.env,
     DATABASE_URL: databaseUrl,
     DBMATE_MIGRATIONS_DIR: migrationsPath
   };
-  
+
   return new Promise((resolve) => {
     const dbmateProcess = spawn('dbmate', ['status'], {
       env,
       stdio: 'inherit',
       shell: platform() === 'win32'
     });
-    
+
     dbmateProcess.on('error', (error) => {
       console.log(chalk.red('\n✗ Error running dbmate:'));
       console.log(chalk.red(error.message));
@@ -281,7 +284,7 @@ async function runDbmateStatus(dbName, migrationsPath = './db/migrations') {
       console.log(chalk.cyan('Install dbmate: https://github.com/amacneil/dbmate#installation'));
       resolve();
     });
-    
+
     dbmateProcess.on('close', (code) => {
       if (code === 0) {
         console.log(chalk.green('\n✓ Status check complete!'));
@@ -298,27 +301,29 @@ async function runDbmateStatus(dbName, migrationsPath = './db/migrations') {
  */
 async function cloneDatabase(sourceDb, targetDb) {
   console.log(chalk.blue(`📋 Cloning database "${sourceDb}" to "${targetDb}"...\n`));
-  
+
   // First, create the target database
   const createSql = `CREATE DATABASE ${targetDb};`;
   const createResult = await executePsqlCommand(createSql);
-  
+
   if (!createResult.success && !createResult.stderr.includes('already exists')) {
     console.log(chalk.red(`✗ Error creating target database "${targetDb}":`));
     console.log(chalk.red(createResult.stderr));
     return;
   }
-  
+
   // Use pg_dump and psql to clone
-  const env = { 
+  const env = {
+    ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
-    PGPASSWORD: process.env.PG_PASSWORD
+    PGPASSWORD: process.env.PG_PASSWORD,
+    PAGER: 'cat'
   };
-  
-  const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${sourceDb} | psql -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${targetDb}`;
-  
+
+  const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${sourceDb} | psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${targetDb}`;
+
   try {
     await execAsync(command, { env, shell: true });
     console.log(chalk.green(`✓ Database "${sourceDb}" cloned to "${targetDb}" successfully!`));
@@ -333,17 +338,17 @@ async function cloneDatabase(sourceDb, targetDb) {
  */
 async function resetDatabase(dbName, migrationsPath = './db/migrations') {
   console.log(chalk.blue(`🔄 Resetting database "${dbName}"...\n`));
-  
+
   // Drop the database
   await dropDatabase(dbName);
-  
+
   console.log('');
-  
+
   // Create the database
   await createDatabase(dbName);
-  
+
   console.log('');
-  
+
   // Run migrations
   await runDbmateUp(dbName, migrationsPath);
 }
@@ -353,19 +358,19 @@ async function resetDatabase(dbName, migrationsPath = './db/migrations') {
  */
 async function createDbmateMigration(migrationName, migrationsPath = './db/migrations') {
   console.log(chalk.blue(`📝 Creating new migration "${migrationName}"...\n`));
-  
-  const env = { 
+
+  const env = {
     ...process.env,
     DBMATE_MIGRATIONS_DIR: migrationsPath
   };
-  
+
   return new Promise((resolve) => {
     const dbmateProcess = spawn('dbmate', ['new', migrationName], {
       env,
       stdio: 'inherit',
       shell: platform() === 'win32'
     });
-    
+
     dbmateProcess.on('error', (error) => {
       console.log(chalk.red('\n✗ Error running dbmate:'));
       console.log(chalk.red(error.message));
@@ -373,7 +378,7 @@ async function createDbmateMigration(migrationName, migrationsPath = './db/migra
       console.log(chalk.cyan('Install dbmate: https://github.com/amacneil/dbmate#installation'));
       resolve();
     });
-    
+
     dbmateProcess.on('close', (code) => {
       if (code === 0) {
         console.log(chalk.green('\n✓ Migration file created successfully!'));
@@ -390,24 +395,26 @@ async function createDbmateMigration(migrationName, migrationsPath = './db/migra
  */
 async function backupDatabase(dbName, backupPath) {
   console.log(chalk.blue(`💾 Backing up database "${dbName}" to "${backupPath}"...\n`));
-  
-  const env = { 
+
+  const env = {
+    ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
-    PGPASSWORD: process.env.PG_PASSWORD
+    PGPASSWORD: process.env.PG_PASSWORD,
+    PAGER: 'cat'
   };
-  
+
   // Ensure directory exists
-  const path = require('path');
+  const pathModule = require('path');
   const fs = require('fs');
-  const dir = path.dirname(backupPath);
+  const dir = pathModule.dirname(backupPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  
+
   const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbName} > "${backupPath}"`;
-  
+
   try {
     await execAsync(command, { env, shell: true });
     console.log(chalk.green(`✓ Database "${dbName}" backed up successfully to "${backupPath}"!`));
@@ -422,16 +429,18 @@ async function backupDatabase(dbName, backupPath) {
  */
 async function restoreDatabase(dbName, backupPath) {
   console.log(chalk.blue(`♻️  Restoring database "${dbName}" from "${backupPath}"...\n`));
-  
-  const env = { 
+
+  const env = {
+    ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
-    PGPASSWORD: process.env.PG_PASSWORD
+    PGPASSWORD: process.env.PG_PASSWORD,
+    PAGER: 'cat'
   };
-  
-  const command = `psql -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} < "${backupPath}"`;
-  
+
+  const command = `psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} < "${backupPath}"`;
+
   try {
     await execAsync(command, { env, shell: true });
     console.log(chalk.green(`✓ Database "${dbName}" restored successfully from "${backupPath}"!`));
@@ -446,34 +455,35 @@ async function restoreDatabase(dbName, backupPath) {
  */
 async function executeSqlFile(dbName, sqlFilePath) {
   console.log(chalk.blue(`⚡ Executing SQL file "${sqlFilePath}" on database "${dbName}"...\n`));
-  
+
   const fs = require('fs');
-  const path = require('path');
-  
+
   // Check if file exists
   if (!fs.existsSync(sqlFilePath)) {
     console.log(chalk.red(`✗ SQL file "${sqlFilePath}" not found!`));
     return;
   }
-  
-  const env = { 
+
+  const env = {
+    ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
-    PGPASSWORD: process.env.PG_PASSWORD
+    PGPASSWORD: process.env.PG_PASSWORD,
+    PAGER: 'cat'
   };
-  
+
   // Use psql to execute the file with transaction and error handling
-  const command = `psql -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} -v ON_ERROR_STOP=1 -f "${sqlFilePath}"`;
-  
+  const command = `psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} -v ON_ERROR_STOP=1 -f "${sqlFilePath}"`;
+
   try {
     const { stdout, stderr } = await execAsync(command, { env });
-    
+
     if (stderr && !stderr.includes('COMMIT')) {
       console.log(chalk.yellow('Warnings:'));
       console.log(stderr);
     }
-    
+
     console.log(chalk.green(`✓ SQL file executed successfully!`));
     if (stdout) {
       console.log(stdout);
@@ -489,11 +499,11 @@ async function executeSqlFile(dbName, sqlFilePath) {
  */
 async function listTables(dbName) {
   console.log(chalk.blue(`📋 Listing tables in database "${dbName}"...\n`));
-  
+
   const sql = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;";
-  
+
   const result = await executePsqlCommand(sql, { database: dbName });
-  
+
   if (result.success) {
     console.log(chalk.green('✓ Tables:'));
     console.log(result.stdout);
@@ -508,24 +518,26 @@ async function listTables(dbName) {
  */
 async function exportSchema(dbName, exportPath) {
   console.log(chalk.blue(`📤 Exporting schema for database "${dbName}" to "${exportPath}"...\n`));
-  
-  const env = { 
+
+  const env = {
+    ...process.env,
     PGHOST: process.env.PG_HOST,
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
-    PGPASSWORD: process.env.PG_PASSWORD
+    PGPASSWORD: process.env.PG_PASSWORD,
+    PAGER: 'cat'
   };
-  
+
   // Ensure directory exists
-  const path = require('path');
+  const pathModule = require('path');
   const fs = require('fs');
-  const dir = path.dirname(exportPath);
+  const dir = pathModule.dirname(exportPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  
+
   const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} --schema-only ${dbName} > "${exportPath}"`;
-  
+
   try {
     await execAsync(command, { env, shell: true });
     console.log(chalk.green(`✓ Schema exported successfully to "${exportPath}"!`));
@@ -540,11 +552,11 @@ async function exportSchema(dbName, exportPath) {
  */
 async function listUsers() {
   console.log(chalk.blue('👥 Listing PostgreSQL users/roles...\n'));
-  
+
   const sql = "SELECT rolname as username, rolsuper as is_superuser, rolcreatedb as can_create_db, rolcreaterole as can_create_role FROM pg_roles WHERE rolname NOT LIKE 'pg_%' ORDER BY rolname;";
-  
+
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green('✓ Users/Roles:'));
     console.log(result.stdout);
@@ -559,10 +571,10 @@ async function listUsers() {
  */
 async function createUser(username, password) {
   console.log(chalk.blue(`👤 Creating user "${username}"...\n`));
-  
+
   const sql = `CREATE USER ${username} WITH PASSWORD '${password}';`;
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green(`✓ User "${username}" created successfully!`));
   } else {
@@ -580,18 +592,18 @@ async function createUser(username, password) {
  */
 async function createRole(roleName, options = {}) {
   console.log(chalk.blue(`🎭 Creating role "${roleName}"...\n`));
-  
+
   let sqlOptions = [];
   if (options.canLogin) sqlOptions.push('LOGIN');
   if (options.canCreateDb) sqlOptions.push('CREATEDB');
   if (options.canCreateRole) sqlOptions.push('CREATEROLE');
   if (options.isSuperuser) sqlOptions.push('SUPERUSER');
-  
+
   const optionsStr = sqlOptions.length > 0 ? ` WITH ${sqlOptions.join(' ')}` : '';
   const sql = `CREATE ROLE ${roleName}${optionsStr};`;
-  
+
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green(`✓ Role "${roleName}" created successfully!`));
   } else {
@@ -609,10 +621,10 @@ async function createRole(roleName, options = {}) {
  */
 async function grantPermissions(dbName, username) {
   console.log(chalk.blue(`🔓 Granting permissions to user "${username}" on database "${dbName}"...\n`));
-  
+
   const sql = `GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${username};`;
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green(`✓ Permissions granted successfully!`));
   } else {
@@ -626,10 +638,10 @@ async function grantPermissions(dbName, username) {
  */
 async function revokePermissions(dbName, username) {
   console.log(chalk.blue(`🔒 Revoking permissions from user "${username}" on database "${dbName}"...\n`));
-  
+
   const sql = `REVOKE ALL PRIVILEGES ON DATABASE ${dbName} FROM ${username};`;
   const result = await executePsqlCommand(sql);
-  
+
   if (result.success) {
     console.log(chalk.green(`✓ Permissions revoked successfully!`));
   } else {
