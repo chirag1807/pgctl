@@ -1,96 +1,96 @@
 name: Build and Release
 
 on:
-    push:
-        tags:
-            - "v*"
-    workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
 
 jobs:
-    build:
-        name: Build Executables
-        runs-on: ubuntu-latest
+  build:
+    name: Build Executables
+    runs-on: macos-latest
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "18"
-                  cache: "npm"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
 
-            - name: Install dependencies
-              run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-            - name: Build executables for all platforms
-              run: npm run build
+      - name: Build executables for all platforms
+        run: npm run build
 
-            - name: List built files
-              run: ls -lah build/
+      - name: List built files
+        run: ls -lah build/
 
-            - name: Upload artifacts
-              uses: actions/upload-artifact@v4
-              with:
-                  name: pgctl-executables
-                  path: build/
-                  retention-days: 30
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pgctl-executables
+          path: build/
+          retention-days: 30
 
-    release:
-        name: Create Release
-        needs: build
-        runs-on: ubuntu-latest
+  release:
+    name: Create Release
+    needs: build
+    runs-on: macos-latest
 
-        permissions:
-            contents: write
+    permissions:
+      contents: write
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Download artifacts
-              uses: actions/download-artifact@v4
-              with:
-                  name: pgctl-executables
-                  path: ./release-artifacts
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pgctl-executables
+          path: ./release-artifacts
 
-            - name: List release artifacts
-              run: ls -lah release-artifacts/
+      - name: List release artifacts
+        run: ls -lah release-artifacts/
 
-            - name: Get version from tag
-              id: tag-version
-              run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Get version from tag
+        id: tag-version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-            - name: Create Release
-              uses: softprops/action-gh-release@v1
-              with:
-                  files: |
-                      release-artifacts/pgctl-linux-x64
-                      release-artifacts/pgctl-macos-x64
-                      release-artifacts/pgctl-macos-arm64
-                      release-artifacts/pgctl-win-x64.exe
-                  draft: false
-                  prerelease: false
-                  generate_release_notes: true
-                  body: |
-                      ## 🚀 pgctl - PostgreSQL DB Ops CLI
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-artifacts/pgctl-linux-x64
+            release-artifacts/pgctl-macos-x64
+            release-artifacts/pgctl-macos-arm64
+            release-artifacts/pgctl-win-x64.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🚀 pgctl - PostgreSQL DB Ops CLI
 
-                      **Version:** ${{ steps.tag-version.outputs.version }}
+            **Version:** ${{ steps.tag-version.outputs.version }}
 
-                      ### 📦 Available Executables:
-                      - **Linux x64**: `pgctl-linux-x64`
-                      - **macOS x64**: `pgctl-macos-x64`
-                      - **macOS ARM64**: `pgctl-macos-arm64`
-                      - **Windows x64**: `pgctl-win-x64.exe`
+            ### 📦 Available Executables:
+            - **Linux x64**: `pgctl-linux-x64`
+            - **macOS x64**: `pgctl-macos-x64`
+            - **macOS ARM64**: `pgctl-macos-arm64`
+            - **Windows x64**: `pgctl-win-x64.exe`
 
-                      ### 📝 How to use:
-                      1. Download the appropriate executable for your platform
-                      2. Make it executable (Linux/macOS): `chmod +x pgctl-*`
-                      3. Set up environment variables (PG_HOST, PG_USER, PG_PASSWORD, PG_PORT)
-                      4. Run: `./pgctl-linux-x64` or `pgctl-win-x64.exe`
+            ### 📝 How to use:
+            1. Download the appropriate executable for your platform
+            2. Make it executable (Linux/macOS): `chmod +x pgctl-*`
+            3. Set up environment variables (PG_HOST, PG_USER, PG_PASSWORD, PG_PORT)
+            4. Run: `./pgctl-linux-x64` or `pgctl-win-x64.exe`
 
-                      ### ✨ What's New:
-                      See release notes below for detailed changes.
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            ### ✨ What's New:
+            See release notes below for detailed changes.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
