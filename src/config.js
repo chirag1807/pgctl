@@ -8,7 +8,8 @@ const fs = require('fs');
  */
 function loadConfig() {
   // Load environment variables from .env file
-  const envPath = path.join(__dirname, '..', '.env');
+  // const envPath = path.join(__dirname, '..', '.env');
+  const envPath = '.env';
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
     console.log(chalk.green('✓ Loaded .env file'));

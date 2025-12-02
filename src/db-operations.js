@@ -47,13 +47,10 @@ async function executePsqlCommand(sql, options = {}) {
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD,
-    // Disable pager on macOS/Linux to prevent hanging
-    PAGER: 'cat'
   };
   const dbFlag = options.database ? `-d ${options.database}` : '';
 
-  // Use --no-psqlrc to avoid user config issues, -P pager=off as backup
-  const command = `psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbFlag} -c "${sql}"`;
+  const command = `psql -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbFlag} -c "${sql}"`;
 
   try {
     const { stdout, stderr } = await execAsync(command, { env });
@@ -319,10 +316,9 @@ async function cloneDatabase(sourceDb, targetDb) {
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD,
-    PAGER: 'cat'
   };
 
-  const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${sourceDb} | psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${targetDb}`;
+  const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${sourceDb} | psql -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${targetDb}`;
 
   try {
     await execAsync(command, { env, shell: true });
@@ -402,7 +398,6 @@ async function backupDatabase(dbName, backupPath) {
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD,
-    PAGER: 'cat'
   };
 
   // Ensure directory exists
@@ -436,10 +431,9 @@ async function restoreDatabase(dbName, backupPath) {
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD,
-    PAGER: 'cat'
   };
 
-  const command = `psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} < "${backupPath}"`;
+  const command = `psql -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} < "${backupPath}"`;
 
   try {
     await execAsync(command, { env, shell: true });
@@ -470,11 +464,10 @@ async function executeSqlFile(dbName, sqlFilePath) {
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD,
-    PAGER: 'cat'
   };
 
   // Use psql to execute the file with transaction and error handling
-  const command = `psql --no-psqlrc -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} -v ON_ERROR_STOP=1 -f "${sqlFilePath}"`;
+  const command = `psql -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} -v ON_ERROR_STOP=1 -f "${sqlFilePath}"`;
 
   try {
     const { stdout, stderr } = await execAsync(command, { env });
@@ -525,7 +518,6 @@ async function exportSchema(dbName, exportPath) {
     PGPORT: process.env.PG_PORT,
     PGUSER: process.env.PG_USER,
     PGPASSWORD: process.env.PG_PASSWORD,
-    PAGER: 'cat'
   };
 
   // Ensure directory exists

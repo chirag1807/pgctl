@@ -38,7 +38,7 @@ const context = {
 
 // Main menu categories
 const mainMenuChoices = [
-  { name: '1) 🗄️  Database Operations', value: 'database' },
+  { name: '1) 🗄️ Database Operations', value: 'database' },
   { name: '2) 🔄 Migrations (dbmate)', value: 'migrations' },
   { name: '3) 💾 Backup & Restore', value: 'backup' },
   { name: '4) ⚡ SQL Operations', value: 'sql' },
