@@ -90,7 +90,5 @@ jobs:
             3. Set up environment variables (PG_HOST, PG_USER, PG_PASSWORD, PG_PORT)
             4. Run: `./pgctl-linux-x64` or `pgctl-win-x64.exe`
 
-            ### ✨ What's New:
-            See release notes below for detailed changes.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

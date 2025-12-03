@@ -1,6 +1,6 @@
 {
-  "name": "pgctl",
-  "version": "1.0.0",
+  "name": "@chirag1807/pgctl",
+  "version": "1.0.1",
   "description": "A Node.js CLI tool wrapper for PostgreSQL DB operations and dbmate migrations",
   "main": "index.js",
   "bin": {
