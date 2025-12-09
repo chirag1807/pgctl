@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Build Executables
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
