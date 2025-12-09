@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: pgctl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PORT: ${PG_PORT}
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+      - ./exports:/exports
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pgctl-network
+
+  # pgctl CLI Tool (have attached profile 'cli', so to run it use: docker compose run --rm pgctl)
+  pgctl:
+    profiles:
+      - cli
+    build:
+      context: .
+      dockerfile: dockerfile
+      args:
+        TARGET_PLATFORM: node18-linux-x64
+        BINARY_NAME: pgctl-linux
+    container_name: pgctl-cli
+    stdin_open: true
+    tty: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_HOST: postgres
+      PG_PORT: ${PG_PORT}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+    volumes:
+      - ./backups:/app/backups
+      - ./exports:/app/exports
+      - ./db:/app/db
+    networks:
+      - pgctl-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  pgctl-network:
+    driver: bridge
