@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+*.exe
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.github/
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Application specific
+backups/
+exports/
+
+# Docker
+dockerfile
+.dockerignore
+
