@@ -408,7 +408,20 @@ async function backupDatabase(dbName, backupPath) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbName} > "${backupPath}"`;
+  // Determine format by extension
+  const fileExt = pathModule.extname(backupPath).toLowerCase();
+  let command;
+
+  // Custom format (.dump, .backup, .dmp) uses -Fc (compressed custom format)
+  // Plain SQL format (.sql) uses default format
+  if (fileExt === '.dump' || fileExt === '.backup' || fileExt === '.dmp') {
+    console.log(chalk.cyan('Creating custom format backup (compressed)...\n'));
+    command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -Fc -f "${backupPath}" ${dbName}`;
+  } else {
+    // Default to plain SQL format
+    console.log(chalk.cyan('Creating plain SQL format backup...\n'));
+    command = `pg_dump -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} ${dbName} > "${backupPath}"`;
+  }
 
   try {
     await execAsync(command, { env, shell: true });
@@ -425,6 +438,15 @@ async function backupDatabase(dbName, backupPath) {
 async function restoreDatabase(dbName, backupPath) {
   console.log(chalk.blue(`♻️  Restoring database "${dbName}" from "${backupPath}"...\n`));
 
+  const fs = require('fs');
+  const pathModule = require('path');
+
+  // Check if file exists
+  if (!fs.existsSync(backupPath)) {
+    console.log(chalk.red(`✗ Backup file "${backupPath}" not found!`));
+    return;
+  }
+
   const env = {
     ...process.env,
     PGHOST: process.env.PG_HOST,
@@ -433,14 +455,33 @@ async function restoreDatabase(dbName, backupPath) {
     PGPASSWORD: process.env.PG_PASSWORD,
   };
 
-  const command = `psql -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} < "${backupPath}"`;
+  // Determine file format by extension
+  const fileExt = pathModule.extname(backupPath).toLowerCase();
+  let command;
+  let usePgRestore = false;
+
+  // Custom format (.dump, .backup, .dmp) requires pg_restore
+  // Plain SQL format (.sql) uses psql
+  if (fileExt === '.dump' || fileExt === '.backup' || fileExt === '.dmp') {
+    usePgRestore = true;
+    console.log(chalk.cyan('Detected custom format backup, using pg_restore...\n'));
+    command = `pg_restore -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} --clean --if-exists --no-owner --no-acl "${backupPath}"`;
+  } else {
+    // Default to psql for .sql or unknown extensions
+    console.log(chalk.cyan('Detected plain SQL format, using psql...\n'));
+    command = `psql -P pager=off -h ${env.PGHOST} -p ${env.PGPORT} -U ${env.PGUSER} -d ${dbName} < "${backupPath}"`;
+  }
 
   try {
     await execAsync(command, { env, shell: true });
     console.log(chalk.green(`✓ Database "${dbName}" restored successfully from "${backupPath}"!`));
   } catch (error) {
     console.log(chalk.red(`✗ Error restoring database:`));
-    console.log(chalk.red(error.message));
+    console.log(chalk.red(error.stderr || error.message));
+    
+    if (usePgRestore && error.message.includes('pg_restore')) {
+      console.log(chalk.yellow('\nMake sure pg_restore is installed and in your PATH.'));
+    }
   }
 }
 
